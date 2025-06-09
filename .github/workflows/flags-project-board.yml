@@ -105,28 +105,15 @@ jobs:
                       } else if (context.eventName === 'workflow_dispatch' || context.eventName === 'workflow_call') {
                           // Handle manual dispatch or workflow call
                           const inputs = context.payload.inputs || {};
-                          if (inputs.pr_node_id) {
-                              nodeId = inputs.pr_node_id;
-                          } else if (steps['get-pr']?.outputs?.node_id) {
-                              nodeId = steps['get-pr'].outputs.node_id;
-                          } else {
-                              // If we don't have a node ID, we need to get the PR details
-                              const prResponse = await github.rest.pulls.get({
-                                  owner: process.env.ORG_NAME,
-                                  repo: inputs.repository,
-                                  pull_number: inputs.pr_number
-                              });
-                              pr = prResponse.data;
-                              nodeId = pr.node_id;
-                          }
                           
-                          if (!pr) {
-                              pr = await github.rest.pulls.get({
-                                  owner: process.env.ORG_NAME,
-                                  repo: inputs.repository,
-                                  pull_number: inputs.pr_number
-                              });
-                          }
+                          // Always fetch PR details since we need them anyway
+                          const prResponse = await github.rest.pulls.get({
+                              owner: process.env.ORG_NAME,
+                              repo: inputs.repository,
+                              pull_number: inputs.pr_number
+                          });
+                          pr = prResponse.data;
+                          nodeId = pr.node_id;
                           isDraft = inputs.is_draft === 'true';
                       } else {
                           throw new Error(`Unsupported event type: ${context.eventName}`);
