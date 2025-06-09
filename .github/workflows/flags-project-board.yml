@@ -6,6 +6,7 @@ env:
     IN_REVIEW_OPTION_ID: 0c52b517 # Status: In Review
     IN_PROGRESS_OPTION_ID: 47fc9ee4 # Status: In Progress
     ORG_NAME: haacked-demos
+    TEAM_SLUG: developers
 
 on:
     pull_request:
@@ -23,6 +24,7 @@ jobs:
                   IN_REVIEW_OPTION_ID: ${{ env.IN_REVIEW_OPTION_ID }}
                   IN_PROGRESS_OPTION_ID: ${{ env.IN_PROGRESS_OPTION_ID }}
                   ORG_NAME: ${{ env.ORG_NAME }}
+                  TEAM_SLUG: ${{ env.TEAM_SLUG }}
               with:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   script: |
@@ -30,7 +32,7 @@ jobs:
                       const owner = context.repo.owner;
                       const repo = context.repo.repo;
                       const prNumber = pr.number;
-                      const teamSlug = 'team-feature-flags';
+                      const teamSlug = process.env.TEAM_SLUG;
 
                       core.info(`Evaluating PR #${prNumber} (draft: ${pr.draft})`);
 
