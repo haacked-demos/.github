@@ -82,10 +82,10 @@ jobs:
               id: check
               uses: actions/github-script@v6
               env:
-                  IN_REVIEW_OPTION_ID: ${{ env.IN_REVIEW_OPTION_ID }}
-                  IN_PROGRESS_OPTION_ID: ${{ env.IN_PROGRESS_OPTION_ID }}
-                  ORG_NAME: ${{ env.ORG_NAME }}
-                  TEAM_SLUG: ${{ env.TEAM_SLUG }}
+                  IN_REVIEW_OPTION_ID: '${{ env.IN_REVIEW_OPTION_ID }}'
+                  IN_PROGRESS_OPTION_ID: '${{ env.IN_PROGRESS_OPTION_ID }}'
+                  ORG_NAME: '${{ env.ORG_NAME }}'
+                  TEAM_SLUG: '${{ env.TEAM_SLUG }}'
               with:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   script: |
