@@ -16,11 +16,11 @@ on:
                 required: true
                 type: number
             repository:
-                description: 'The repository name (e.g. todo-app)'
-                required: true
+                description: 'The repository name (e.g. todo-app). Required only if pr_node_id is not provided.'
+                required: false
                 type: string
             pr_node_id:
-                description: 'The node ID of the pull request (optional, will be looked up if not provided)'
+                description: 'The node ID of the pull request. If provided, repository is not required.'
                 required: false
                 type: string
             is_draft:
@@ -34,11 +34,11 @@ on:
                 required: true
                 type: number
             repository:
-                description: 'The repository name (e.g. todo-app)'
-                required: true
+                description: 'The repository name (e.g. todo-app). Required only if pr_node_id is not provided.'
+                required: false
                 type: string
             pr_node_id:
-                description: 'The node ID of the pull request (optional, will be looked up if not provided)'
+                description: 'The node ID of the pull request. If provided, repository is not required.'
                 required: false
                 type: string
             is_draft:
@@ -68,6 +68,10 @@ jobs:
                       const prNumber = ${{ github.event.inputs.pr_number }};
                       const repo = '${{ github.event.inputs.repository }}';
                       const owner = process.env.ORG_NAME;
+                      
+                      if (!repo) {
+                          throw new Error('Repository is required when pr_node_id is not provided');
+                      }
                       
                       const { data: pr } = await github.rest.pulls.get({
                           owner,
@@ -106,14 +110,30 @@ jobs:
                           // Handle manual dispatch or workflow call
                           const inputs = context.payload.inputs || {};
                           
-                          // Always fetch PR details since we need them anyway
-                          const prResponse = await github.rest.pulls.get({
-                              owner: process.env.ORG_NAME,
-                              repo: inputs.repository,
-                              pull_number: inputs.pr_number
-                          });
-                          pr = prResponse.data;
-                          nodeId = pr.node_id;
+                          if (inputs.pr_node_id) {
+                              // If we have a node ID, we can use it directly
+                              nodeId = inputs.pr_node_id;
+                              // We still need to get PR details for other checks
+                              const repo = inputs.repository || context.payload.repository.name;
+                              const prResponse = await github.rest.pulls.get({
+                                  owner: process.env.ORG_NAME,
+                                  repo,
+                                  pull_number: inputs.pr_number
+                              });
+                              pr = prResponse.data;
+                          } else {
+                              // If no node ID, we need repository and will get PR details
+                              if (!inputs.repository) {
+                                  throw new Error('Repository is required when pr_node_id is not provided');
+                              }
+                              const prResponse = await github.rest.pulls.get({
+                                  owner: process.env.ORG_NAME,
+                                  repo: inputs.repository,
+                                  pull_number: inputs.pr_number
+                              });
+                              pr = prResponse.data;
+                              nodeId = pr.node_id;
+                          }
                           isDraft = inputs.is_draft === 'true';
                       } else {
                           throw new Error(`Unsupported event type: ${context.eventName}`);
