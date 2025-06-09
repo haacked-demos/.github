@@ -1,3 +1,14 @@
+# This workflow manages pull requests in the Feature Flags Project board.
+# It automatically adds PRs to the project and sets their status based on:
+# - Whether the PR is in draft mode
+# - Whether the PR has reviewers from the specified team
+#
+# Required permissions:
+# - POSTHOG_BOT_GITHUB_TOKEN with:
+#   - repo scope (for PR operations)
+#   - project scope (for project board operations)
+#   - read:org scope (for team membership checks)
+
 name: Add PR to Feature Flags Project
 
 env:
@@ -130,7 +141,7 @@ jobs:
                               const prData = result.node;
                               
                               if (!prData) {
-                                  throw new Error(`Could not find PR with node ID: ${inputs.pr_node_id}`);
+                                  throw new Error(`Could not find PR with node ID: ${inputs.pr_node_id}. This might be due to insufficient permissions or the PR no longer existing.`);
                               }
                               
                               // Extract repository name from nameWithOwner (format: "owner/repo")
@@ -149,7 +160,7 @@ jobs:
                           } else {
                               // If no node ID, we need repository and will get PR details
                               if (!inputs.repository) {
-                                  throw new Error('Repository is required when pr_node_id is not provided');
+                                  throw new Error('Repository name is required when pr_node_id is not provided. Please provide the repository name (e.g. todo-app) in the workflow inputs.');
                               }
                               const prResponse = await github.rest.pulls.get({
                                   owner: process.env.ORG_NAME,
@@ -161,7 +172,7 @@ jobs:
                           }
                           isDraft = inputs.is_draft === 'true';
                       } else {
-                          throw new Error(`Unsupported event type: ${context.eventName}`);
+                          throw new Error(`Unsupported event type: ${context.eventName}. This workflow only supports pull_request, workflow_dispatch, and workflow_call events.`);
                       }
                       
                       const owner = process.env.ORG_NAME;
