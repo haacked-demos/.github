@@ -90,9 +90,8 @@ jobs:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   script: |
                       // Debug logging
-                      core.info('Event name: ' + github.event_name);
                       core.info('Event type: ' + context.eventName);
-                      core.info('Event payload: ' + JSON.stringify(github.event, null, 2));
+                      core.info('Payload: ' + JSON.stringify(context.payload, null, 2));
                       
                       let pr;
                       let isDraft;
@@ -105,18 +104,19 @@ jobs:
                           nodeId = pr.node_id;
                       } else if (context.eventName === 'workflow_dispatch' || context.eventName === 'workflow_call') {
                           // Handle manual dispatch or workflow call
-                          if (github.event.inputs?.pr_node_id) {
-                              nodeId = github.event.inputs.pr_node_id;
+                          const inputs = context.payload.inputs || {};
+                          if (inputs.pr_node_id) {
+                              nodeId = inputs.pr_node_id;
                           } else {
                               nodeId = steps['get-pr'].outputs.node_id;
                           }
                           
                           pr = await github.rest.pulls.get({
                               owner: process.env.ORG_NAME,
-                              repo: '${{ github.event.inputs.repository }}',
-                              pull_number: ${{ github.event.inputs.pr_number }}
+                              repo: inputs.repository,
+                              pull_number: inputs.pr_number
                           });
-                          isDraft = ${{ github.event.inputs.is_draft }};
+                          isDraft = inputs.is_draft === 'true';
                       } else {
                           throw new Error(`Unsupported event type: ${context.eventName}`);
                       }
