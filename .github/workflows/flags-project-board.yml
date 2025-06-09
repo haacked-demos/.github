@@ -15,9 +15,13 @@ on:
                 description: 'The number of the pull request'
                 required: true
                 type: number
-            pr_node_id:
-                description: 'The node ID of the pull request'
+            repository:
+                description: 'The repository name (e.g. todo-app)'
                 required: true
+                type: string
+            pr_node_id:
+                description: 'The node ID of the pull request (optional, will be looked up if not provided)'
+                required: false
                 type: string
             is_draft:
                 description: 'Whether the pull request is in draft mode'
@@ -29,9 +33,13 @@ on:
                 description: 'The number of the pull request'
                 required: true
                 type: number
-            pr_node_id:
-                description: 'The node ID of the pull request'
+            repository:
+                description: 'The repository name (e.g. todo-app)'
                 required: true
+                type: string
+            pr_node_id:
+                description: 'The node ID of the pull request (optional, will be looked up if not provided)'
+                required: false
                 type: string
             is_draft:
                 description: 'Whether the pull request is in draft mode'
@@ -48,6 +56,28 @@ jobs:
             github.event_name == 'workflow_call' || 
             startsWith(github.repository, format('{0}/', github.env.ORG_NAME))
         steps:
+            - name: Get PR Node ID if not provided
+              id: get-pr
+              if: |
+                (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && 
+                !github.event.inputs.pr_node_id
+              uses: actions/github-script@v6
+              with:
+                  github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  script: |
+                      const prNumber = ${{ github.event.inputs.pr_number }};
+                      const repo = ${{ github.event.inputs.repository }};
+                      const owner = process.env.ORG_NAME;
+                      
+                      const { data: pr } = await github.rest.pulls.get({
+                          owner,
+                          repo,
+                          pull_number: prNumber
+                      });
+                      
+                      core.setOutput('node_id', pr.node_id);
+                      core.setOutput('is_draft', pr.draft);
+
             - name: Determine PR status and desired project status
               id: check
               uses: actions/github-script@v6
@@ -59,18 +89,40 @@ jobs:
               with:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   script: |
-                      const pr = context.payload.pull_request;
-                      const owner = context.repo.owner;
-                      const repo = context.repo.repo;
+                      let pr;
+                      let isDraft;
+                      let nodeId;
+                      
+                      if (github.event_name === 'pull_request') {
+                          pr = context.payload.pull_request;
+                          isDraft = pr.draft;
+                          nodeId = pr.node_id;
+                      } else {
+                          if (github.event.inputs.pr_node_id) {
+                              nodeId = github.event.inputs.pr_node_id;
+                          } else {
+                              nodeId = steps.get-pr.outputs.node_id;
+                          }
+                          
+                          pr = await github.rest.pulls.get({
+                              owner: process.env.ORG_NAME,
+                              repo: ${{ github.event.inputs.repository }},
+                              pull_number: ${{ github.event.inputs.pr_number }}
+                          });
+                          isDraft = ${{ github.event.inputs.is_draft }};
+                      }
+                      
+                      const owner = process.env.ORG_NAME;
+                      const repo = pr.base.repo.name;
                       const prNumber = pr.number;
                       const teamSlug = process.env.TEAM_SLUG;
 
-                      core.info(`Evaluating PR #${prNumber} (draft: ${pr.draft})`);
+                      core.info(`Evaluating PR #${prNumber} (draft: ${isDraft})`);
 
                       let isTeamRequested = false;
                       let isMemberRequested = false;
 
-                      if (!pr.draft) {
+                      if (!isDraft) {
                         const { data: reviewers } = await github.rest.pulls.listRequestedReviewers({
                           owner,
                           repo,
@@ -94,7 +146,7 @@ jobs:
 
                       let statusOptionId = null;
 
-                      if (pr.draft) {
+                      if (isDraft) {
                         core.info("PR is a draft. Setting status to 'In Progress'.");
                         statusOptionId = process.env.IN_PROGRESS_OPTION_ID;
                       } else if (isTeamRequested || isMemberRequested) {
@@ -106,7 +158,7 @@ jobs:
 
                       const shouldAdd = statusOptionId !== null;
                       core.setOutput('should_add', shouldAdd.toString());
-                      core.setOutput('pr_node_id', pr.node_id);
+                      core.setOutput('pr_node_id', nodeId);
                       core.setOutput('status_option_id', statusOptionId ?? '');
 
             - name: Add PR to Project V2 if not already present
