@@ -257,7 +257,7 @@ jobs:
                               title
                               fields(first: 10) {
                                 nodes {
-                                  ... on ProjectV2Field {
+                                  ... on ProjectV2SingleSelectField {
                                     id
                                     name
                                     options {
@@ -275,7 +275,16 @@ jobs:
                       const projectResult = await github.graphql(projectQuery, { projectId });
                       const project = projectResult.node;
                       const statusField = project.fields.nodes.find(f => f.id === fieldId);
+                      
+                      if (!statusField) {
+                          throw new Error(`Could not find status field with ID ${fieldId} in project '${project.title}'. Please check the STATUS_FIELD_ID environment variable.`);
+                      }
+                      
                       const statusOption = statusField.options.find(o => o.id === optionId);
+                      
+                      if (!statusOption) {
+                          throw new Error(`Could not find status option with ID ${optionId} in field '${statusField.name}'. Please check the status option IDs in the environment variables.`);
+                      }
 
                       core.info(`Checking if PR is already in project '${project.title}'...`);
 
