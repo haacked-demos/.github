@@ -95,7 +95,6 @@ jobs:
                   script: |
                       // Debug logging
                       core.info('Event type: ' + context.eventName);
-                      core.info('Payload: ' + JSON.stringify(context.payload, null, 2));
                       
                       let pr;
                       let isDraft;
@@ -118,7 +117,7 @@ jobs:
                                     ... on PullRequest {
                                       id
                                       number
-                                      draft
+                                      isDraft
                                       repository {
                                         nameWithOwner
                                       }
@@ -146,6 +145,7 @@ jobs:
                               
                               pr = prResponse.data;
                               nodeId = inputs.pr_node_id;
+                              isDraft = prData.isDraft;
                           } else {
                               // If no node ID, we need repository and will get PR details
                               if (!inputs.repository) {
