@@ -1,10 +1,10 @@
 name: Add PR to Feature Flags Project
 
 env:
-    PROJECT_V2_ID: PVT_kwDOAgyiKM4A7GJu
-    STATUS_FIELD_ID: PVTSSF_lADOAgyiKM4A7GJuzgvfuDU
-    IN_REVIEW_OPTION_ID: 0c52b517 # Status: In Review
-    IN_PROGRESS_OPTION_ID: 47fc9ee4 # Status: In Progress
+    PROJECT_V2_ID: PVT_kwDOAgyiKM4A7GJu             # Feature Flags Project
+    STATUS_FIELD_ID: PVTSSF_lADOAgyiKM4A7GJuzgvfuDU # Status Field
+    IN_REVIEW_OPTION_ID: 0c52b517                   # Status: In Review Option ID
+    IN_PROGRESS_OPTION_ID: 47fc9ee4                 # Status: In Progress Option ID
     ORG_NAME: haacked-demos
     TEAM_SLUG: developers
 
