@@ -1,0 +1,164 @@
+name: Add PR to Feature Flags Project
+
+env:
+    PROJECT_V2_ID: PVT_kwDOAgyiKM4A7GJu
+    STATUS_FIELD_ID: PVTSSF_lADOAgyiKM4A7GJuzgvfuDU
+    IN_REVIEW_OPTION_ID: 0c52b517 # Status: In Review
+    IN_PROGRESS_OPTION_ID: 47fc9ee4 # Status: In Progress
+    ORG_NAME: haacked-demos
+
+on:
+    pull_request:
+        types: [opened, ready_for_review, review_requested, synchronize]
+
+jobs:
+    add-to-project-v2:
+        runs-on: ubuntu-latest
+        if: startsWith(github.repository, format('{0}/', github.env.ORG_NAME))
+        steps:
+            - name: Determine PR status and desired project status
+              id: check
+              uses: actions/github-script@v6
+              env:
+                  IN_REVIEW_OPTION_ID: ${{ env.IN_REVIEW_OPTION_ID }}
+                  IN_PROGRESS_OPTION_ID: ${{ env.IN_PROGRESS_OPTION_ID }}
+                  ORG_NAME: ${{ env.ORG_NAME }}
+              with:
+                  github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  script: |
+                      const pr = context.payload.pull_request;
+                      const owner = context.repo.owner;
+                      const repo = context.repo.repo;
+                      const prNumber = pr.number;
+                      const teamSlug = 'team-feature-flags';
+
+                      core.info(`Evaluating PR #${prNumber} (draft: ${pr.draft})`);
+
+                      let isTeamRequested = false;
+                      let isMemberRequested = false;
+
+                      if (!pr.draft) {
+                        const { data: reviewers } = await github.rest.pulls.listRequestedReviewers({
+                          owner,
+                          repo,
+                          pull_number: prNumber
+                        });
+
+                        isTeamRequested = reviewers.team_reviewers.some(t => t.slug === teamSlug);
+
+                        for (const user of reviewers.users) {
+                          try {
+                            await github.rest.teams.getMembershipForUserInOrg({
+                              org: owner,
+                              team_slug: teamSlug,
+                              username: user.login
+                            });
+                            isMemberRequested = true;
+                            break;
+                          } catch {}
+                        }
+                      }
+
+                      let statusOptionId = null;
+
+                      if (pr.draft) {
+                        core.info("PR is a draft. Setting status to 'In Progress'.");
+                        statusOptionId = process.env.IN_PROGRESS_OPTION_ID;
+                      } else if (isTeamRequested || isMemberRequested) {
+                        core.info("PR is ready and relevant team reviewer found. Setting status to 'In Review'.");
+                        statusOptionId = process.env.IN_REVIEW_OPTION_ID;
+                      } else {
+                        core.info("PR is not relevant to team-feature-flags. Skipping.");
+                      }
+
+                      const shouldAdd = statusOptionId !== null;
+                      core.setOutput('should_add', shouldAdd.toString());
+                      core.setOutput('pr_node_id', pr.node_id);
+                      core.setOutput('status_option_id', statusOptionId ?? '');
+
+            - name: Add PR to Project V2 if not already present
+              if: steps.check.outputs.should_add == 'true'
+              uses: actions/github-script@v6
+              env:
+                  PROJECT_V2_ID: ${{ env.PROJECT_V2_ID }}
+                  STATUS_FIELD_ID: ${{ env.STATUS_FIELD_ID }}
+                  PR_NODE_ID: ${{ steps.check.outputs.pr_node_id }}
+                  STATUS_OPTION_ID: ${{ steps.check.outputs.status_option_id }}
+              with:
+                  github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
+                  script: |
+                      const projectId = process.env.PROJECT_V2_ID;
+                      const fieldId = process.env.STATUS_FIELD_ID;
+                      const optionId = process.env.STATUS_OPTION_ID;
+                      const contentId = process.env.PR_NODE_ID;
+
+                      core.info("Checking if PR is already in the project...");
+
+                      const query = `
+                        query($projectId: ID!) {
+                          node(id: $projectId) {
+                            ... on ProjectV2 {
+                              items(first: 100) { # Limit is sufficient for our team size
+                                nodes {
+                                  id
+                                  content {
+                                    ... on PullRequest { id }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      `;
+
+                      const result = await github.graphql(query, { projectId });
+                      const items = result.node.items.nodes;
+
+                      let existingItemId = null;
+                      for (const item of items) {
+                        if (item.content?.id === contentId) {
+                          existingItemId = item.id;
+                          break;
+                        }
+                      }
+
+                      if (existingItemId) {
+                        core.info("PR already exists in project. Updating status field...");
+                      } else {
+                        core.info("PR not found in project. Adding...");
+                        const addItemMutation = `
+                          mutation($projectId: ID!, $contentId: ID!) {
+                            addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                              item { id }
+                            }
+                          }
+                        `;
+
+                        const response = await github.graphql(addItemMutation, { projectId, contentId });
+                        existingItemId = response.addProjectV2ItemById.item.id;
+                      }
+
+                      const updateStatusMutation = `
+                        mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                          updateProjectV2ItemFieldValue(input: {
+                            projectId: $projectId,
+                            itemId: $itemId,
+                            fieldId: $fieldId,
+                            value: { singleSelectOptionId: $optionId }
+                          }) {
+                            projectV2Item { id }
+                          }
+                        }
+                      `;
+
+                      try {
+                        await github.graphql(updateStatusMutation, {
+                          projectId,
+                          itemId: existingItemId,
+                          fieldId,
+                          optionId
+                        });
+                        core.info(`PR status set to option ID: ${optionId}`);
+                      } catch (error) {
+                        core.setFailed(`Failed to update PR status: ${error.message}`);
+                      }
