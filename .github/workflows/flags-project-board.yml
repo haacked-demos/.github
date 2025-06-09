@@ -136,30 +136,23 @@ jobs:
                           pull_number: prNumber
                         });
 
-                        core.info('Reviewers data: ' + JSON.stringify(reviewers, null, 2));
-
                         // Check team reviewers if they exist
                         if (reviewers && reviewers.team_reviewers) {
                           isTeamRequested = reviewers.team_reviewers.some(t => t.slug === teamSlug);
-                          core.info(`Team reviewers found: ${reviewers.team_reviewers.map(t => t.slug).join(', ')}`);
                         }
 
                         // Check user reviewers if they exist
                         if (reviewers && reviewers.users) {
                           for (const user of reviewers.users) {
                             try {
-                              core.info(`Checking if ${user.login} is a member of team ${teamSlug}`);
                               await github.rest.teams.getMembershipForUserInOrg({
                                 org: owner,
                                 team_slug: teamSlug,
                                 username: user.login
                               });
                               isMemberRequested = true;
-                              core.info(`${user.login} is a member of team ${teamSlug}`);
                               break;
-                            } catch (error) {
-                              core.info(`${user.login} is not a member of team ${teamSlug}: ${error.message}`);
-                            }
+                            } catch {}
                           }
                         }
                       }
@@ -173,7 +166,7 @@ jobs:
                         core.info("PR is ready and relevant team reviewer found. Setting status to 'In Review'.");
                         statusOptionId = process.env.IN_REVIEW_OPTION_ID;
                       } else {
-                        core.info("PR is not relevant to team-feature-flags. Skipping.");
+                        core.info(`PR is not relevant to team ${process.env.TEAM_SLUG}. Skipping.`);
                       }
 
                       const shouldAdd = statusOptionId !== null;
