@@ -9,15 +9,32 @@ env:
     TEAM_SLUG: developers
 
 on:
-    workflow_call:
+    workflow_dispatch:
         inputs:
             pr_number:
+                description: 'The number of the pull request'
                 required: true
                 type: number
             pr_node_id:
+                description: 'The node ID of the pull request'
                 required: true
                 type: string
             is_draft:
+                description: 'Whether the pull request is in draft mode'
+                required: true
+                type: boolean
+    workflow_call:
+        inputs:
+            pr_number:
+                description: 'The number of the pull request'
+                required: true
+                type: number
+            pr_node_id:
+                description: 'The node ID of the pull request'
+                required: true
+                type: string
+            is_draft:
+                description: 'Whether the pull request is in draft mode'
                 required: true
                 type: boolean
     pull_request:
