@@ -111,16 +111,41 @@ jobs:
                           const inputs = context.payload.inputs || {};
                           
                           if (inputs.pr_node_id) {
-                              // If we have a node ID, we can use it directly
-                              nodeId = inputs.pr_node_id;
-                              // We still need to get PR details for other checks
-                              const repo = inputs.repository || context.payload.repository.name;
+                              // If we have a node ID, use GraphQL to get PR details
+                              const query = `
+                                query($nodeId: ID!) {
+                                  node(id: $nodeId) {
+                                    ... on PullRequest {
+                                      id
+                                      number
+                                      draft
+                                      repository {
+                                        nameWithOwner
+                                      }
+                                    }
+                                  }
+                                }
+                              `;
+                              
+                              const result = await github.graphql(query, { nodeId: inputs.pr_node_id });
+                              const prData = result.node;
+                              
+                              if (!prData) {
+                                  throw new Error(`Could not find PR with node ID: ${inputs.pr_node_id}`);
+                              }
+                              
+                              // Extract repository name from nameWithOwner (format: "owner/repo")
+                              const [owner, repo] = prData.repository.nameWithOwner.split('/');
+                              
+                              // Get full PR details
                               const prResponse = await github.rest.pulls.get({
-                                  owner: process.env.ORG_NAME,
+                                  owner,
                                   repo,
-                                  pull_number: inputs.pr_number
+                                  pull_number: prData.number
                               });
+                              
                               pr = prResponse.data;
+                              nodeId = inputs.pr_node_id;
                           } else {
                               // If no node ID, we need repository and will get PR details
                               if (!inputs.repository) {
