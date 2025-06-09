@@ -101,7 +101,7 @@ jobs:
                           if (github.event.inputs.pr_node_id) {
                               nodeId = github.event.inputs.pr_node_id;
                           } else {
-                              nodeId = steps.get-pr.outputs.node_id;
+                              nodeId = steps['get-pr'].outputs.node_id;
                           }
                           
                           pr = await github.rest.pulls.get({
