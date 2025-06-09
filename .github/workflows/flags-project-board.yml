@@ -9,6 +9,17 @@ env:
     TEAM_SLUG: developers
 
 on:
+    workflow_call:
+        inputs:
+            pr_number:
+                required: true
+                type: number
+            pr_node_id:
+                required: true
+                type: string
+            is_draft:
+                required: true
+                type: boolean
     pull_request:
         types: [opened, ready_for_review, review_requested, synchronize]
 
