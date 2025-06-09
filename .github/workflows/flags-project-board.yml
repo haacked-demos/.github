@@ -94,11 +94,13 @@ jobs:
                       let nodeId;
                       
                       if (github.event_name === 'pull_request') {
+                          // Handle direct PR event
                           pr = context.payload.pull_request;
                           isDraft = pr.draft;
                           nodeId = pr.node_id;
-                      } else {
-                          if (github.event.inputs.pr_node_id) {
+                      } else if (github.event_name === 'workflow_dispatch' || github.event_name === 'workflow_call') {
+                          // Handle manual dispatch or workflow call
+                          if (github.event.inputs?.pr_node_id) {
                               nodeId = github.event.inputs.pr_node_id;
                           } else {
                               nodeId = steps['get-pr'].outputs.node_id;
@@ -110,6 +112,8 @@ jobs:
                               pull_number: ${{ github.event.inputs.pr_number }}
                           });
                           isDraft = ${{ github.event.inputs.is_draft }};
+                      } else {
+                          throw new Error(`Unsupported event type: ${github.event_name}`);
                       }
                       
                       const owner = process.env.ORG_NAME;
