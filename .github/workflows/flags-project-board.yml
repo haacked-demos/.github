@@ -288,6 +288,31 @@ jobs:
 
                       core.info(`Checking if PR is already in project '${project.title}'...`);
 
+                      let existingItemId = null;
+                      let existingPR = null;
+
+                      // First, get the PR details using the node ID
+                      const prQuery = `
+                        query($nodeId: ID!) {
+                          node(id: $nodeId) {
+                            ... on PullRequest {
+                              id
+                              number
+                              title
+                            }
+                          }
+                        }
+                      `;
+                      
+                      const prResult = await github.graphql(prQuery, { nodeId: contentId });
+                      const prData = prResult.node;
+                      
+                      if (!prData) {
+                          throw new Error(`Could not find PR with node ID: ${contentId}`);
+                      }
+
+                      core.info(`Checking if PR #${prData.number} (${prData.title}) is already in project '${project.title}'...`);
+
                       const query = `
                         query($projectId: ID!) {
                           node(id: $projectId) {
@@ -298,8 +323,6 @@ jobs:
                                   content {
                                     ... on PullRequest { 
                                       id
-                                      number
-                                      title
                                     }
                                   }
                                 }
@@ -312,31 +335,22 @@ jobs:
                       const result = await github.graphql(query, { projectId });
                       const items = result.node.items.nodes;
 
-                      let existingItemId = null;
-                      let existingPR = null;
                       for (const item of items) {
                           if (item.content?.id === contentId) {
                               existingItemId = item.id;
-                              existingPR = item.content;
                               break;
                           }
                       }
 
                       if (existingItemId) {
-                          core.info(`PR #${existingPR.number} (${existingPR.title}) already exists in project '${project.title}'. Updating status to '${statusOption.name}'...`);
+                          core.info(`PR #${prData.number} (${prData.title}) already exists in project '${project.title}'. Updating status to '${statusOption.name}'...`);
                       } else {
-                          core.info(`Adding PR #${existingPR.number} (${existingPR.title}) to project '${project.title}'...`);
+                          core.info(`Adding PR #${prData.number} (${prData.title}) to project '${project.title}'...`);
                           const addItemMutation = `
                             mutation($projectId: ID!, $contentId: ID!) {
                               addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
                                 item { 
                                   id
-                                  content {
-                                    ... on PullRequest {
-                                      number
-                                      title
-                                    }
-                                  }
                                 }
                               }
                             }
@@ -344,8 +358,7 @@ jobs:
 
                           const response = await github.graphql(addItemMutation, { projectId, contentId });
                           existingItemId = response.addProjectV2ItemById.item.id;
-                          existingPR = response.addProjectV2ItemById.item.content;
-                          core.info(`Added PR #${existingPR.number} (${existingPR.title}) to project '${project.title}'.`);
+                          core.info(`Added PR #${prData.number} (${prData.title}) to project '${project.title}'.`);
                       }
 
                       const updateStatusMutation = `
@@ -358,12 +371,6 @@ jobs:
                           }) {
                             projectV2Item { 
                               id
-                              content {
-                                ... on PullRequest {
-                                  number
-                                  title
-                                }
-                              }
                             }
                           }
                         }
@@ -376,7 +383,7 @@ jobs:
                               fieldId,
                               optionId
                           });
-                          core.info(`Updated PR #${existingPR.number} (${existingPR.title}) status to '${statusOption.name}' in project '${project.title}'.`);
+                          core.info(`Updated PR #${prData.number} (${prData.title}) status to '${statusOption.name}' in project '${project.title}'.`);
                       } catch (error) {
-                          core.setFailed(`Failed to update PR #${existingPR.number} status: ${error.message}`);
+                          core.setFailed(`Failed to update PR #${prData.number} (${prData.title}) status: ${error.message}`);
                       }
