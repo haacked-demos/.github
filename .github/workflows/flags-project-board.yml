@@ -89,16 +89,21 @@ jobs:
               with:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
                   script: |
+                      // Debug logging
+                      core.info('Event name: ' + github.event_name);
+                      core.info('Event type: ' + context.eventName);
+                      core.info('Event payload: ' + JSON.stringify(github.event, null, 2));
+                      
                       let pr;
                       let isDraft;
                       let nodeId;
                       
-                      if (github.event_name === 'pull_request') {
+                      if (context.eventName === 'pull_request') {
                           // Handle direct PR event
                           pr = context.payload.pull_request;
                           isDraft = pr.draft;
                           nodeId = pr.node_id;
-                      } else if (github.event_name === 'workflow_dispatch' || github.event_name === 'workflow_call') {
+                      } else if (context.eventName === 'workflow_dispatch' || context.eventName === 'workflow_call') {
                           // Handle manual dispatch or workflow call
                           if (github.event.inputs?.pr_node_id) {
                               nodeId = github.event.inputs.pr_node_id;
@@ -113,7 +118,7 @@ jobs:
                           });
                           isDraft = ${{ github.event.inputs.is_draft }};
                       } else {
-                          throw new Error(`Unsupported event type: ${github.event_name}`);
+                          throw new Error(`Unsupported event type: ${context.eventName}`);
                       }
                       
                       const owner = process.env.ORG_NAME;
