@@ -11,11 +11,12 @@
 
 name: Add PR to Feature Flags Project
 
+# The IDs below require using the GraphQL API to get them.
 env:
     PROJECT_V2_ID: PVT_kwDOAgyiKM4A7GJu             # Feature Flags Project
-    STATUS_FIELD_ID: PVTSSF_lADOAgyiKM4A7GJuzgvfuDU # Status Field
-    IN_REVIEW_OPTION_ID: 0c52b517                   # Status: In Review Option ID
-    IN_PROGRESS_OPTION_ID: 47fc9ee4                 # Status: In Progress Option ID
+    STATUS_FIELD_ID: PVTSSF_lADOAgyiKM4A7GJuzgvfuDU # Status Field for Feature Flags Project
+    IN_REVIEW_OPTION_ID: 0c52b517                   # Status: In Review Column ID
+    IN_PROGRESS_OPTION_ID: 47fc9ee4                 # Status: In Progress Column ID
     ORG_NAME: haacked-demos
     TEAM_SLUG: developers
 
@@ -27,30 +28,18 @@ on:
                 required: true
                 type: number
             repository:
-                description: 'The repository name (e.g. todo-app). Required only if pr_node_id is not provided.'
-                required: false
-                type: string
-            pr_node_id:
-                description: 'The node ID of the pull request. If provided, repository is not required.'
-                required: false
-                type: string
-            is_draft:
-                description: 'Whether the pull request is in draft mode'
+                description: 'The repository name (e.g. todo-app)'
                 required: true
-                type: boolean
+                type: string
     workflow_call:
         inputs:
             pr_number:
                 description: 'The number of the pull request'
                 required: true
                 type: number
-            repository:
-                description: 'The repository name (e.g. todo-app). Required only if pr_node_id is not provided.'
-                required: false
-                type: string
             pr_node_id:
-                description: 'The node ID of the pull request. If provided, repository is not required.'
-                required: false
+                description: 'The node ID of the pull request'
+                required: true
                 type: string
             is_draft:
                 description: 'Whether the pull request is in draft mode'
@@ -60,18 +49,16 @@ on:
         types: [opened, ready_for_review, review_requested, synchronize]
 
 jobs:
-    add-to-project-v2:
+    add-to-project-board:
         runs-on: ubuntu-latest
         if: |
             github.event_name == 'workflow_dispatch' || 
             github.event_name == 'workflow_call' || 
             startsWith(github.repository, format('{0}/', github.env.ORG_NAME))
         steps:
-            - name: Get PR Node ID if not provided
+            - name: Get PR Node ID for workflow_dispatch
               id: get-pr
-              if: |
-                (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && 
-                !github.event.inputs.pr_node_id
+              if: github.event_name == 'workflow_dispatch'
               uses: actions/github-script@v6
               with:
                   github-token: ${{ secrets.POSTHOG_BOT_GITHUB_TOKEN }}
@@ -79,10 +66,6 @@ jobs:
                       const prNumber = ${{ github.event.inputs.pr_number }};
                       const repo = '${{ github.event.inputs.repository }}';
                       const owner = process.env.ORG_NAME;
-                      
-                      if (!repo) {
-                          throw new Error('Repository is required when pr_node_id is not provided');
-                      }
                       
                       const { data: pr } = await github.rest.pulls.get({
                           owner,
@@ -116,63 +99,55 @@ jobs:
                           pr = context.payload.pull_request;
                           isDraft = pr.draft;
                           nodeId = pr.node_id;
-                      } else if (context.eventName === 'workflow_dispatch' || context.eventName === 'workflow_call') {
-                          // Handle manual dispatch or workflow call
-                          const inputs = context.payload.inputs || {};
-                          
-                          if (inputs.pr_node_id) {
-                              // If we have a node ID, use GraphQL to get PR details
-                              const query = `
-                                query($nodeId: ID!) {
-                                  node(id: $nodeId) {
-                                    ... on PullRequest {
-                                      id
-                                      number
-                                      isDraft
-                                      repository {
-                                        nameWithOwner
-                                      }
-                                    }
+                      } else if (context.eventName === 'workflow_dispatch') {
+                          // Handle manual dispatch
+                          const prResponse = await github.rest.pulls.get({
+                              owner: process.env.ORG_NAME,
+                              repo: context.payload.inputs.repository,
+                              pull_number: context.payload.inputs.pr_number
+                          });
+                          pr = prResponse.data;
+                          nodeId = steps['get-pr'].outputs.node_id;
+                          isDraft = steps['get-pr'].outputs.is_draft === 'true';
+                      } else if (context.eventName === 'workflow_call') {
+                          // Handle workflow call
+                          const query = `
+                            query($nodeId: ID!) {
+                              node(id: $nodeId) {
+                                ... on PullRequest {
+                                  id
+                                  number
+                                  isDraft
+                                  repository {
+                                    nameWithOwner
                                   }
                                 }
-                              `;
-                              
-                              const result = await github.graphql(query, { nodeId: inputs.pr_node_id });
-                              const prData = result.node;
-                              
-                              if (!prData) {
-                                  throw new Error(`Could not find PR with node ID: ${inputs.pr_node_id}. This might be due to insufficient permissions or the PR no longer existing.`);
                               }
-                              
-                              // Extract repository name from nameWithOwner (format: "owner/repo")
-                              const [owner, repo] = prData.repository.nameWithOwner.split('/');
-                              
-                              // Get full PR details
-                              const prResponse = await github.rest.pulls.get({
-                                  owner,
-                                  repo,
-                                  pull_number: prData.number
-                              });
-                              
-                              pr = prResponse.data;
-                              nodeId = inputs.pr_node_id;
-                              isDraft = prData.isDraft;
-                          } else {
-                              // If no node ID, we need repository and will get PR details
-                              if (!inputs.repository) {
-                                  throw new Error('Repository name is required when pr_node_id is not provided. Please provide the repository name (e.g. todo-app) in the workflow inputs.');
-                              }
-                              const prResponse = await github.rest.pulls.get({
-                                  owner: process.env.ORG_NAME,
-                                  repo: inputs.repository,
-                                  pull_number: inputs.pr_number
-                              });
-                              pr = prResponse.data;
-                              nodeId = pr.node_id;
+                            }
+                          `;
+                          
+                          const result = await github.graphql(query, { nodeId: context.payload.inputs.pr_node_id });
+                          const prData = result.node;
+                          
+                          if (!prData) {
+                              throw new Error(`Could not find PR with node ID: ${context.payload.inputs.pr_node_id}`);
                           }
-                          isDraft = inputs.is_draft === 'true';
+                          
+                          // Extract repository name from nameWithOwner (format: "owner/repo")
+                          const [owner, repo] = prData.repository.nameWithOwner.split('/');
+                          
+                          // Get full PR details
+                          const prResponse = await github.rest.pulls.get({
+                              owner,
+                              repo,
+                              pull_number: prData.number
+                          });
+                          
+                          pr = prResponse.data;
+                          nodeId = context.payload.inputs.pr_node_id;
+                          isDraft = context.payload.inputs.is_draft === 'true';
                       } else {
-                          throw new Error(`Unsupported event type: ${context.eventName}. This workflow only supports pull_request, workflow_dispatch, and workflow_call events.`);
+                          throw new Error(`Unsupported event type: ${context.eventName}`);
                       }
                       
                       const owner = process.env.ORG_NAME;
@@ -182,37 +157,6 @@ jobs:
 
                       core.info(`Evaluating PR #${prNumber} (draft: ${isDraft})`);
 
-                      let isTeamRequested = false;
-                      let isMemberRequested = false;
-
-                      if (!isDraft) {
-                        const { data: reviewers } = await github.rest.pulls.listRequestedReviewers({
-                          owner,
-                          repo,
-                          pull_number: prNumber
-                        });
-
-                        // Check team reviewers if they exist
-                        if (reviewers && reviewers.team_reviewers) {
-                          isTeamRequested = reviewers.team_reviewers.some(t => t.slug === teamSlug);
-                        }
-
-                        // Check user reviewers if they exist
-                        if (reviewers && reviewers.users) {
-                          for (const user of reviewers.users) {
-                            try {
-                              await github.rest.teams.getMembershipForUserInOrg({
-                                org: owner,
-                                team_slug: teamSlug,
-                                username: user.login
-                              });
-                              isMemberRequested = true;
-                              break;
-                            } catch {}
-                          }
-                        }
-                      }
-
                       let statusOptionId = null;
                       let statusName = '';
 
@@ -220,12 +164,39 @@ jobs:
                           core.info(`PR #${prNumber} is a draft. Setting status to 'In Progress'.`);
                           statusOptionId = process.env.IN_PROGRESS_OPTION_ID;
                           statusName = 'In Progress';
-                      } else if (isTeamRequested || isMemberRequested) {
-                          core.info(`PR #${prNumber} is ready and has a reviewer from team '${process.env.TEAM_SLUG}'. Setting status to 'In Review'.`);
-                          statusOptionId = process.env.IN_REVIEW_OPTION_ID;
-                          statusName = 'In Review';
                       } else {
-                          core.info(`PR #${prNumber} is not relevant to team '${process.env.TEAM_SLUG}'. Skipping.`);
+                          // Only check reviewers if PR is not in draft
+                          const { data: reviewers } = await github.rest.pulls.listRequestedReviewers({
+                              owner,
+                              repo,
+                              pull_number: prNumber
+                          });
+
+                          const isTeamRequested = reviewers?.team_reviewers?.some(t => t.slug === teamSlug) ?? false;
+                          
+                          // Check if any user reviewer is a team member
+                          let isMemberRequested = false;
+                          if (reviewers?.users) {
+                              for (const user of reviewers.users) {
+                                  try {
+                                      await github.rest.teams.getMembershipForUserInOrg({
+                                          org: owner,
+                                          team_slug: teamSlug,
+                                          username: user.login
+                                      });
+                                      isMemberRequested = true;
+                                      break;
+                                  } catch {}
+                              }
+                          }
+
+                          if (isTeamRequested || isMemberRequested) {
+                              core.info(`PR #${prNumber} is ready and has a reviewer from team '${teamSlug}'. Setting status to 'In Review'.`);
+                              statusOptionId = process.env.IN_REVIEW_OPTION_ID;
+                              statusName = 'In Review';
+                          } else {
+                              core.info(`PR #${prNumber} is not relevant to team '${teamSlug}'. Skipping.`);
+                          }
                       }
 
                       const shouldAdd = statusOptionId !== null;
