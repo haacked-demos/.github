@@ -49,8 +49,11 @@ on:
 jobs:
     add-to-project-board:
         runs-on: ubuntu-latest
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
         steps:
+            - name: Debug
+              run: |
+                echo "Event name: ${{ github.event_name }}"
+
             - name: Get PR Node ID for workflow_dispatch
               id: get-pr
               if: github.event_name == 'workflow_dispatch'
@@ -198,7 +201,6 @@ jobs:
                       core.setOutput('should_add', shouldAdd.toString());
                       core.setOutput('pr_node_id', nodeId);
                       core.setOutput('status_option_id', statusOptionId ?? '');
-
             - name: Add PR to Project V2 if not already present
               if: steps.check.outputs.should_add == 'true'
               uses: actions/github-script@v6
@@ -353,3 +355,4 @@ jobs:
                       } catch (error) {
                           core.setFailed(`Failed to update PR #${prData.number} (${prData.title}) status: ${error.message}`);
                       }
+
