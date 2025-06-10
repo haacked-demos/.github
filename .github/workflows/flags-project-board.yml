@@ -1,7 +1,11 @@
 # This workflow manages pull requests in the Feature Flags Project board.
-# It automatically adds PRs to the project and sets their status based on:
-# - Whether the PR is in draft mode
-# - Whether the PR has reviewers from the specified team
+# When a member of the team specified by TEAM_SLUG is added as a reviewer to a PR, the workflow will:
+# - Add the PR to the project board
+# - Set the status of the PR to 'In Review'
+# When a PR is converted to draft mode, the workflow will:
+# - Set the status of the PR to 'In Progress'
+# When a PR is marked ready for review, the workflow will:
+# - Set the status of the PR to 'In Review'
 #
 # Required permissions:
 # - POSTHOG_BOT_GITHUB_TOKEN with:
@@ -51,10 +55,6 @@ jobs:
         runs-on: ubuntu-latest
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' || github.event_name == 'pull_request'
         steps:
-            - name: Debug
-              run: |
-                echo "Event name: ${{ github.event_name }}"
-
             - name: Get PR Node ID for workflow_dispatch
               id: get-pr
               if: github.event_name == 'workflow_dispatch'
@@ -202,7 +202,7 @@ jobs:
                       core.setOutput('should_add', shouldAdd.toString());
                       core.setOutput('pr_node_id', nodeId);
                       core.setOutput('status_option_id', statusOptionId ?? '');
-            - name: Add PR to Project V2 if not already present
+            - name: Update Project Board
               if: steps.check.outputs.should_add == 'true'
               uses: actions/github-script@v6
               env:
