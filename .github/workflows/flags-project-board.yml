@@ -45,16 +45,11 @@ on:
                 description: 'The repository name (e.g. todo-app)'
                 required: true
                 type: string
-    pull_request:
-        types: [opened, ready_for_review, review_requested, synchronize, converted_to_draft]
 
 jobs:
     add-to-project-board:
         runs-on: ubuntu-latest
-        if: |
-            github.event_name == 'workflow_dispatch' || 
-            github.event_name == 'workflow_call' || 
-            startsWith(github.repository, format('{0}/', github.env.ORG_NAME))
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
         steps:
             - name: Get PR Node ID for workflow_dispatch
               id: get-pr
