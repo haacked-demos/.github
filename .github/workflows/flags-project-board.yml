@@ -21,16 +21,6 @@ env:
     TEAM_SLUG: developers
 
 on:
-    workflow_dispatch:
-        inputs:
-            pr_number:
-                description: 'The number of the pull request'
-                required: true
-                type: number
-            repository:
-                description: 'The repository name (e.g. todo-app)'
-                required: true
-                type: string
     workflow_call:
         inputs:
             pr_number:
@@ -45,8 +35,18 @@ on:
                 description: 'Whether the pull request is in draft mode'
                 required: true
                 type: boolean
+    workflow_dispatch:
+        inputs:
+            pr_number:
+                description: 'The number of the pull request'
+                required: true
+                type: number
+            repository:
+                description: 'The repository name (e.g. todo-app)'
+                required: true
+                type: string
     pull_request:
-        types: [opened, ready_for_review, review_requested, synchronize]
+        types: [opened, ready_for_review, review_requested, synchronize, converted_to_draft]
 
 jobs:
     add-to-project-board:
@@ -107,8 +107,8 @@ jobs:
                               pull_number: context.payload.inputs.pr_number
                           });
                           pr = prResponse.data;
-                          nodeId = steps['get-pr'].outputs.node_id;
-                          isDraft = steps['get-pr'].outputs.is_draft === 'true';
+                          nodeId = steps.get-pr.outputs.node_id;
+                          isDraft = steps.get-pr.outputs.is_draft === 'true';
                       } else if (context.eventName === 'workflow_call') {
                           // Handle workflow call
                           const query = `
