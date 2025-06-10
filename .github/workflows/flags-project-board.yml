@@ -49,6 +49,7 @@ on:
 jobs:
     add-to-project-board:
         runs-on: ubuntu-latest
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' || github.event_name == 'pull_request'
         steps:
             - name: Debug
               run: |
